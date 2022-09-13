@@ -20,7 +20,8 @@ Please cite our paper if you use MPCos in your work.
 @article{Rui2022MPCos,
   title={Low-Resources Project-Specific Code Summarization},
   author={Rui Xie, Tianxiang Hu, Wei Ye, Shikun Zhang},
-  journal={arXiv preprint arXiv:2111.01998},
-  year={2021}
+  journal={37th {IEEE/ACM} International Conference on Automated Software Engineering,
+               {ASE} 2022},
+  year={2022}
 }
 ```
