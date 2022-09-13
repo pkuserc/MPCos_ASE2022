@@ -1,0 +1,1553 @@
+[
+    {
+        "id": 1,
+        "code": "static CodeBlock bindingTypeDocs(\n    TypeName type, boolean abstrakt, boolean members, boolean dependent) {\n  CodeBlock.Builder result = CodeBlock.builder()\n      .add(\"A {@code Binding<$T>} implementation which satisfies\\n\", type)\n      .add(\"Dagger's infrastructure requirements including:\\n\");\n  if (dependent) {\n    result.add(\"\\n\")\n        .add(\"Owning the dependency links between {@code $T} and its\\n\", type)\n        .add(\"dependencies.\\n\");\n  }\n  if (!abstrakt) {\n    result.add(\"\\n\")\n        .add(\"Being a {@code Provider<$T>} and handling creation and\\n\", type)\n        .add(\"preparation of object instances.\\n\");\n  }\n  if (members) {\n    result.add(\"\\n\")\n        .add(\"Being a {@code MembersInjector<$T>} and handling injection\\n\", type)\n        .add(\"of annotated fields.\\n\");\n  }\n  return result.build();\n}",
+        "summary_tokens": [
+            "creates",
+            "an",
+            "appropriate",
+            "javadoc",
+            "depending",
+            "on",
+            "aspects",
+            "of",
+            "the",
+            "type",
+            "in",
+            "question"
+        ]
+    },
+    {
+        "id": 2,
+        "code": "public static String rawMembersKey(TypeMirror type) {\n  return \"members/\" + rawTypeToString(type, '$');\n}",
+        "summary_tokens": [
+            "returns",
+            "the",
+            "members",
+            "injector",
+            "key",
+            "for",
+            "the",
+            "raw",
+            "type",
+            "of",
+            "type"
+        ]
+    },
+    {
+        "id": 3,
+        "code": "public static String get(VariableElement variable) {\n  StringBuilder result = new StringBuilder();\n  AnnotationMirror qualifier = getQualifier(variable.getAnnotationMirrors());\n  if (qualifier != null) {\n    qualifierToString(qualifier, result);\n  }\n  typeToString(variable.asType(), result, '$');\n  return result.toString();\n}",
+        "summary_tokens": [
+            "returns",
+            "the",
+            "provider",
+            "key",
+            "for",
+            "variable"
+        ]
+    },
+    {
+        "id": 4,
+        "code": "public static String getSetKey(ExecutableElement method) {\n  StringBuilder result = new StringBuilder();\n  AnnotationMirror qualifier = getQualifier(method.getAnnotationMirrors());\n  if (qualifier != null) {\n    qualifierToString(qualifier, result);\n  }\n  result.append(SET_PREFIX);\n  typeToString(method.getReturnType(), result, '$');\n  result.append(\">\");\n  return result.toString();\n}",
+        "summary_tokens": [
+            "returns",
+            "the",
+            "provided",
+            "key",
+            "for",
+            "method",
+            "wrapped",
+            "by",
+            "set"
+        ]
+    },
+    {
+        "id": 5,
+        "code": "private static AnnotationMirror getQualifier(\n    List<? extends AnnotationMirror> annotations) {\n  AnnotationMirror qualifier = null;\n  for (AnnotationMirror annotation : annotations) {\n    if (annotation.getAnnotationType().asElement().getAnnotation(Qualifier.class) == null) {\n      continue;\n    }\n    qualifier = annotation;\n  }\n  return qualifier;\n}",
+        "summary_tokens": [
+            "does",
+            "not",
+            "test",
+            "for",
+            "multiple",
+            "qualifiers"
+        ]
+    },
+    {
+        "id": 6,
+        "code": "private static TypeElement resolveType(Elements elements, String className, StringBuilder sb,\n    final int index) {\n\n    \n  sb.setCharAt(index, '.');\n  int nextIndex = nextDollar(className, sb, index + 1);\n  TypeElement type = nextIndex == -1\n      ? getTypeElement(elements, sb)\n      : resolveType(elements, className, sb, nextIndex);\n  if (type != null) {\n    return type;\n  }\n\n    \n  sb.setCharAt(index, '$');\n  nextIndex = nextDollar(className, sb, index + 1);\n  return nextIndex == -1\n      ? getTypeElement(elements, sb)\n      : resolveType(elements, className, sb, nextIndex);\n}",
+        "summary_tokens": [
+            "recursively",
+            "explores",
+            "the",
+            "space",
+            "of",
+            "possible",
+            "canonical",
+            "names",
+            "for",
+            "a",
+            "given",
+            "binary",
+            "class",
+            "name"
+        ]
+    },
+    {
+        "id": 7,
+        "code": "private static int nextDollar(String className, CharSequence current, int searchStart) {\n  while (true) {\n    int index = className.indexOf('$', searchStart);\n    if (index == -1) {\n      return -1;\n    }\n      \n      \n    if (index == 0 || index == className.length() - 1\n        || current.charAt(index - 1) == '.' || current.charAt(index + 1) == '.') {\n      searchStart = index + 1;\n      continue;\n    }\n    return index;\n  }\n}",
+        "summary_tokens": [
+            "finds",
+            "the",
+            "next",
+            "in",
+            "a",
+            "class",
+            "name",
+            "which",
+            "can",
+            "be",
+            "changed",
+            "to",
+            "a"
+        ]
+    },
+    {
+        "id": 8,
+        "code": "@Override public boolean process(Set<? extends TypeElement> types, RoundEnvironment env) {\n  if (!env.processingOver()) {\n      \n      \n    for (Element e : env.getElementsAnnotatedWith(Module.class)) {\n      if (!(e instanceof TypeElement)) {\n        error(\"@Module applies to a type, \" + e.getSimpleName() + \" is a \" + e.getKind(), e);\n        continue;\n      }\n      delayedModuleNames.add(((TypeElement) e).getQualifiedName().toString());\n    }\n    return false;\n  }\n\n  Set<Element> modules = new LinkedHashSet<Element>();\n  for (String moduleName : delayedModuleNames) {\n    modules.add(elements().getTypeElement(moduleName));\n  }\n\n  for (Element element : modules) {\n    Map<String, Object> annotation = null;\n    try {\n      annotation = getAnnotation(Module.class, element);\n    } catch (CodeGenerationIncompleteException e) {\n      continue; \n    }\n\n    TypeElement moduleType = (TypeElement) element;\n    if (annotation == null) {\n      error(\"Missing @Module annotation.\", moduleType);\n      continue;\n    }\n    if (annotation.get(\"complete\").equals(Boolean.TRUE)) {\n      Map<String, Binding<?>> bindings;\n      try {\n        bindings = processCompleteModule(moduleType, false);\n        new ProblemDetector().detectCircularDependencies(bindings.values());\n      } catch (ModuleValidationException e) {\n        error(\"Graph validation failed: \" + e.getMessage(), e.source);\n        continue;\n      } catch (InvalidBindingException e) {\n        error(\"Graph validation failed: \" + e.getMessage(), elements().getTypeElement(e.type));\n        continue;\n      } catch (RuntimeException e) {\n        if (ERROR_NAMES_TO_PROPAGATE.contains(e.getClass().getName())) {\n          throw e;\n        }\n        error(\"Unknown error \" + e.getClass().getName() + \" thrown by javac in graph validation: \"\n            + e.getMessage(), moduleType);\n        continue;\n      }\n      try {\n        writeDotFile(moduleType, bindings);\n      } catch (IOException e) {\n        StringWriter sw = new StringWriter();\n        e.printStackTrace(new PrintWriter(sw));\n        processingEnv.getMessager()\n            .printMessage(Diagnostic.Kind.WARNING,\n                \"Graph visualization failed. Please report this as a bug.\\n\\n\" + sw, moduleType);\n      }\n    }\n\n    if (annotation.get(\"library\").equals(Boolean.FALSE)) {\n      Map<String, Binding<?>> bindings = processCompleteModule(moduleType, true);\n      try {\n        new ProblemDetector().detectUnusedBinding(bindings.values());\n      } catch (IllegalStateException e) {\n        error(\"Graph validation failed: \" + e.getMessage(), moduleType);\n      }\n    }\n  }\n  return false;\n}",
+        "summary_tokens": [
+            "perform",
+            "full",
+            "graph",
+            "analysis",
+            "on",
+            "complete",
+            "modules"
+        ]
+    },
+    {
+        "id": 9,
+        "code": "private boolean allTypesExist(Collection<? extends Element> elements) {\n  for (Element element : elements) {\n    if (element.asType().getKind() == TypeKind.ERROR) {\n      return false;\n    }\n  }\n  return true;\n}",
+        "summary_tokens": [
+            "return",
+            "true",
+            "if",
+            "all",
+            "element",
+            "types",
+            "are",
+            "currently",
+            "available",
+            "in",
+            "this",
+            "code",
+            "generation",
+            "pass"
+        ]
+    },
+    {
+        "id": 10,
+        "code": "private InjectedClass createInjectedClass(String injectedClassName) {\n  TypeElement type = processingEnv.getElementUtils().getTypeElement(injectedClassName);\n  boolean isAbstract = type.getModifiers().contains(ABSTRACT);\n  List<Element> staticFields = new ArrayList<Element>();\n  ExecutableElement constructor = null;\n  List<Element> fields = new ArrayList<Element>();\n  for (Element member : type.getEnclosedElements()) {\n    if (member.getAnnotation(Inject.class) == null) {\n      continue;\n    }\n\n    switch (member.getKind()) {\n      case FIELD:\n        if (member.getModifiers().contains(STATIC)) {\n          staticFields.add(member);\n        } else {\n          fields.add(member);\n        }\n        break;\n      case CONSTRUCTOR:\n        if (constructor != null) {\n            \n          error(\"Too many injectable constructors on \" + type.getQualifiedName(), member);\n        } else if (isAbstract) {\n            \n          error(\"Abstract class \" + type.getQualifiedName()\n              + \" must not have an @Inject-annotated constructor.\", member);\n        }\n        constructor = (ExecutableElement) member;\n        break;\n      default:\n          \n        error(\"Cannot inject \" + elementToString(member), member);\n        break;\n    }\n  }\n\n  if (constructor == null && !isAbstract) {\n    constructor = getNoArgsConstructor(type);\n    if (constructor != null && !isCallableConstructor(constructor)) {\n      constructor = null;\n    }\n  }\n\n  return new InjectedClass(type, staticFields, constructor, fields);\n}",
+        "summary_tokens": [
+            "injected",
+            "class",
+            "name",
+            "the",
+            "name",
+            "of",
+            "a",
+            "class",
+            "with",
+            "an",
+            "annotated",
+            "member"
+        ]
+    },
+    {
+        "id": 11,
+        "code": "private void generateInjectAdapter(TypeElement type, ExecutableElement constructor,\n    List<Element> fields) throws IOException {\n  String packageName = getPackage(type).getQualifiedName().toString();\n  TypeMirror supertype = getApplicationSupertype(type);\n  if (supertype != null) {\n    supertype = processingEnv.getTypeUtils().erasure(supertype);\n  }\n  ClassName injectedClassName = ClassName.get(type);\n  ClassName adapterClassName = adapterName(injectedClassName, INJECT_ADAPTER_SUFFIX);\n\n  boolean isAbstract = type.getModifiers().contains(ABSTRACT);\n  boolean injectMembers = !fields.isEmpty() || supertype != null;\n  boolean disambiguateFields = !fields.isEmpty()\n      && (constructor != null)\n      && !constructor.getParameters().isEmpty();\n  boolean dependent = injectMembers\n      || ((constructor != null) && !constructor.getParameters().isEmpty());\n\n  TypeSpec.Builder result = TypeSpec.classBuilder(adapterClassName.simpleName())\n      .addOriginatingElement(type)\n      .addModifiers(PUBLIC, FINAL)\n      .superclass(ParameterizedTypeName.get(ClassName.get(Binding.class), injectedClassName))\n      .addJavadoc(\"$L\", bindingTypeDocs(injectableType(type.asType()), isAbstract,\n          injectMembers, dependent).toString());\n\n  for (Element field : fields) {\n    result.addField(memberBindingField(disambiguateFields, field));\n  }\n  if (constructor != null) {\n    for (VariableElement parameter : constructor.getParameters()) {\n      result.addField(parameterBindingField(disambiguateFields, parameter));\n    }\n  }\n  if (supertype != null) {\n    result.addField(supertypeBindingField(supertype));\n  }\n\n  result.addMethod(writeInjectAdapterConstructor(constructor, type, injectedClassName));\n  if (dependent) {\n    result.addMethod(attachMethod(\n        constructor, fields, disambiguateFields, injectedClassName, supertype, true));\n    result.addMethod(getDependenciesMethod(\n        constructor, fields, disambiguateFields, supertype, true));\n  }\n  if (constructor != null) {\n    result.addMethod(\n        getMethod(constructor, disambiguateFields, injectMembers, injectedClassName));\n  }\n  if (injectMembers) {\n    result.addMethod(\n        membersInjectMethod(fields, disambiguateFields, injectedClassName, supertype));\n  }\n\n  JavaFile javaFile = JavaFile.builder(packageName, result.build())\n      .addFileComment(AdapterJavadocs.GENERATED_BY_DAGGER)\n      .build();\n  javaFile.writeTo(processingEnv.getFiler());\n}",
+        "summary_tokens": [
+            "write",
+            "a",
+            "companion",
+            "class",
+            "for",
+            "type",
+            "that",
+            "extends",
+            "binding"
+        ]
+    },
+    {
+        "id": 12,
+        "code": "private void generateStaticInjection(TypeElement type, List<Element> fields) throws IOException {\n  ClassName typeName = ClassName.get(type);\n  ClassName adapterClassName = adapterName(ClassName.get(type), STATIC_INJECTION_SUFFIX);\n\n  TypeSpec.Builder result = TypeSpec.classBuilder(adapterClassName.simpleName())\n      .addOriginatingElement(type)\n      .addJavadoc(AdapterJavadocs.STATIC_INJECTION_TYPE, type)\n      .addModifiers(PUBLIC, FINAL)\n      .superclass(StaticInjection.class);\n  for (Element field : fields) {\n    result.addField(memberBindingField(false, field));\n  }\n  result.addMethod(attachMethod(null, fields, false, typeName, null, true));\n  result.addMethod(staticInjectMethod(fields, typeName));\n\n  String packageName = getPackage(type).getQualifiedName().toString();\n  JavaFile javaFile = JavaFile.builder(packageName, result.build())\n      .addFileComment(AdapterJavadocs.GENERATED_BY_DAGGER)\n      .build();\n  javaFile.writeTo(processingEnv.getFiler());\n}",
+        "summary_tokens": [
+            "write",
+            "a",
+            "companion",
+            "class",
+            "for",
+            "type",
+            "that",
+            "extends",
+            "static",
+            "injection"
+        ]
+    },
+    {
+        "id": 13,
+        "code": "private Map<String, List<ExecutableElement>> providerMethodsByClass(RoundEnvironment env) {\n  Elements elementUtils = processingEnv.getElementUtils();\n  Types types = processingEnv.getTypeUtils();\n\n  Map<String, List<ExecutableElement>> result = new HashMap<String, List<ExecutableElement>>();\n\n  provides:\n  for (Element providerMethod : findProvidesMethods(env)) {\n    switch (providerMethod.getEnclosingElement().getKind()) {\n      case CLASS:\n        break; \n      default:\n          \n        error(\"Unexpected @Provides on \" + elementToString(providerMethod), providerMethod);\n        continue;\n    }\n    TypeElement type = (TypeElement) providerMethod.getEnclosingElement();\n    Set<Modifier> typeModifiers = type.getModifiers();\n    if (typeModifiers.contains(PRIVATE)\n        || typeModifiers.contains(ABSTRACT)) {\n      error(\"Classes declaring @Provides methods must not be private or abstract: \"\n              + type.getQualifiedName(), type);\n      continue;\n    }\n\n    Set<Modifier> methodModifiers = providerMethod.getModifiers();\n    if (methodModifiers.contains(PRIVATE)\n        || methodModifiers.contains(ABSTRACT)\n        || methodModifiers.contains(STATIC)) {\n      error(\"@Provides methods must not be private, abstract or static: \"\n              + type.getQualifiedName() + \".\" + providerMethod, providerMethod);\n      continue;\n    }\n\n    ExecutableElement providerMethodAsExecutable = (ExecutableElement) providerMethod;\n    if (!providerMethodAsExecutable.getThrownTypes().isEmpty()) {\n      error(\"@Provides methods must not have a throws clause: \"\n          + type.getQualifiedName() + \".\" + providerMethod, providerMethod);\n      continue;\n    }\n\n      \n    TypeMirror returnType = types.erasure(providerMethodAsExecutable.getReturnType());\n    if (!returnType.getKind().equals(TypeKind.ERROR)) {\n        \n        \n      for (String invalidTypeName : INVALID_RETURN_TYPES) {\n        TypeElement invalidTypeElement = elementUtils.getTypeElement(invalidTypeName);\n        if (invalidTypeElement != null && types.isSameType(returnType,\n            types.erasure(invalidTypeElement.asType()))) {\n          error(String.format(\"@Provides method must not return %s directly: %s.%s\",\n              invalidTypeElement, type.getQualifiedName(), providerMethod), providerMethod);\n          continue provides; \n        }\n      }\n    }\n\n    List<ExecutableElement> methods = result.get(type.getQualifiedName().toString());\n    if (methods == null) {\n      methods = new ArrayList<ExecutableElement>();\n      result.put(type.getQualifiedName().toString(), methods);\n    }\n    methods.add(providerMethodAsExecutable);\n  }\n\n  TypeMirror objectType = elementUtils.getTypeElement(\"java.lang.Object\").asType();\n\n    \n    \n  for (Element module : env.getElementsAnnotatedWith(Module.class)) {\n    if (!module.getKind().equals(ElementKind.CLASS)) {\n      error(\"Modules must be classes: \" + elementToString(module), module);\n      continue;\n    }\n\n    TypeElement moduleType = (TypeElement) module;\n\n      \n    if (!types.isSameType(moduleType.getSuperclass(), objectType)) {\n      error(\"Modules must not extend from other classes: \" + elementToString(module), module);\n    }\n\n    String moduleName = moduleType.getQualifiedName().toString();\n    if (result.containsKey(moduleName)) continue;\n    result.put(moduleName, new ArrayList<ExecutableElement>());\n  }\n  return result;\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "map",
+            "containing",
+            "all",
+            "methods",
+            "indexed",
+            "by",
+            "class"
+        ]
+    },
+    {
+        "id": 14,
+        "code": "private JavaFile generateModuleAdapter(TypeElement type,\n    Map<String, Object> module, List<ExecutableElement> providerMethods) {\n  Object[] staticInjections = (Object[]) module.get(\"staticInjections\");\n  Object[] injects = (Object[]) module.get(\"injects\");\n  Object[] includes = (Object[]) module.get(\"includes\");\n  boolean overrides = (Boolean) module.get(\"overrides\");\n  boolean complete = (Boolean) module.get(\"complete\");\n  boolean library = (Boolean) module.get(\"library\");\n\n  List<Object> duplicateInjects = extractDuplicates(injects);\n  if (!duplicateInjects.isEmpty()) {\n    error(\"'injects' list contains duplicate entries: \" + duplicateInjects, type);\n  }\n  List<Object> duplicateIncludes = extractDuplicates(includes);\n  if (!duplicateIncludes.isEmpty()) {\n    error(\"'includes' list contains duplicate entries: \" + duplicateIncludes, type);\n  }\n\n  ClassName moduleClassName = ClassName.get(type);\n  ClassName adapterClassName = Util.adapterName(moduleClassName, MODULE_ADAPTER_SUFFIX);\n\n  TypeSpec.Builder adapterBuilder = TypeSpec.classBuilder(adapterClassName.simpleName())\n      .addOriginatingElement(type)\n      .addJavadoc(AdapterJavadocs.MODULE_TYPE, Provides.class)\n      .superclass(ParameterizedTypeName.get(ClassName.get(ModuleAdapter.class), moduleClassName))\n      .addModifiers(PUBLIC, FINAL);\n\n  adapterBuilder.addField(FieldSpec.builder(String[].class, \"INJECTS\")\n      .addModifiers(PRIVATE, STATIC, FINAL)\n      .initializer(\"$L\", injectsInitializer(injects))\n      .build());\n  adapterBuilder.addField(FieldSpec.builder(ARRAY_OF_CLASS, \"STATIC_INJECTIONS\")\n      .addModifiers(PRIVATE, STATIC, FINAL)\n      .initializer(\"$L\", staticInjectionsInitializer(staticInjections))\n      .build());\n  adapterBuilder.addField(FieldSpec.builder(ARRAY_OF_CLASS, \"INCLUDES\")\n      .addModifiers(PRIVATE, STATIC, FINAL)\n      .initializer(\"$L\", includesInitializer(type, includes))\n      .build());\n  adapterBuilder.addMethod(MethodSpec.constructorBuilder()\n      .addModifiers(PUBLIC)\n      .addStatement(\"super($T.class, INJECTS, STATIC_INJECTIONS, $L /*overrides*/, \"\n              + \"INCLUDES, $L /*complete*/, $L /*library*/)\",\n          type.asType(), overrides, complete, library)\n      .build());\n\n  ExecutableElement noArgsConstructor = getNoArgsConstructor(type);\n  if (noArgsConstructor != null && isCallableConstructor(noArgsConstructor)) {\n    adapterBuilder.addMethod(MethodSpec.methodBuilder(\"newModule\")\n        .addAnnotation(Override.class)\n        .addModifiers(PUBLIC)\n        .returns(moduleClassName)\n        .addStatement(\"return new $T()\", type.asType())\n        .build());\n  }\n\n    \n  Map<ExecutableElement, ClassName> methodToClassName\n      = new LinkedHashMap<ExecutableElement, ClassName>();\n  Map<String, AtomicInteger> methodNameToNextId = new LinkedHashMap<String, AtomicInteger>();\n\n  if (!providerMethods.isEmpty()) {\n    MethodSpec.Builder getBindings = MethodSpec.methodBuilder(\"getBindings\")\n        .addJavadoc(AdapterJavadocs.GET_DEPENDENCIES_METHOD)\n        .addAnnotation(Override.class)\n        .addModifiers(PUBLIC)\n        .addParameter(BindingsGroup.class, \"bindings\")\n        .addParameter(moduleClassName, \"module\");\n\n    for (ExecutableElement providerMethod : providerMethods) {\n      Provides provides = providerMethod.getAnnotation(Provides.class);\n      switch (provides.type()) {\n        case UNIQUE: {\n          getBindings.addStatement(\"bindings.contributeProvidesBinding($S, new $T(module))\",\n              GeneratorKeys.get(providerMethod),\n              bindingClassName(adapterClassName, providerMethod, methodToClassName,\n                  methodNameToNextId));\n          break;\n        }\n        case SET: {\n          getBindings.addStatement(\"$T.add(bindings, $S, new $T(module))\",\n              SetBinding.class,\n              GeneratorKeys.getSetKey(providerMethod),\n              bindingClassName(adapterClassName, providerMethod, methodToClassName,\n                  methodNameToNextId));\n          break;\n        }\n        case SET_VALUES: {\n          getBindings.addStatement(\"$T.add(bindings, $S, new $T(module))\",\n              SetBinding.class,\n              GeneratorKeys.get(providerMethod),\n              bindingClassName(adapterClassName, providerMethod, methodToClassName,\n                  methodNameToNextId));\n          break;\n        }\n        default:\n          throw new AssertionError(\"Unknown @Provides type \" + provides.type());\n      }\n    }\n    adapterBuilder.addMethod(getBindings.build());\n  }\n\n  for (ExecutableElement providerMethod : providerMethods) {\n    adapterBuilder.addType(generateProvidesAdapter(moduleClassName, adapterClassName,\n        providerMethod, methodToClassName, methodNameToNextId, library));\n  }\n\n  return JavaFile.builder(adapterClassName.packageName(), adapterBuilder.build())\n      .addFileComment(AdapterJavadocs.GENERATED_BY_DAGGER)\n      .build();\n}",
+        "summary_tokens": [
+            "write",
+            "a",
+            "companion",
+            "class",
+            "for",
+            "type",
+            "that",
+            "implements",
+            "module",
+            "adapter",
+            "to",
+            "expose",
+            "its",
+            "provider",
+            "methods"
+        ]
+    },
+    {
+        "id": 15,
+        "code": "public static TypeMirror getApplicationSupertype(TypeElement type) {\n  TypeMirror supertype = type.getSuperclass();\n  return Keys.isPlatformType(supertype.toString()) ? null : supertype;\n}",
+        "summary_tokens": [
+            "returns",
+            "the",
+            "supertype",
+            "or",
+            "null",
+            "if",
+            "the",
+            "supertype",
+            "is",
+            "a",
+            "platform",
+            "class"
+        ]
+    },
+    {
+        "id": 16,
+        "code": "public static ClassName adapterName(ClassName type, String suffix) {\n  return ClassName.get(type.packageName(),\n      Joiner.on('$').join(type.simpleNames()) + suffix);\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "class",
+            "name",
+            "to",
+            "complement",
+            "type"
+        ]
+    },
+    {
+        "id": 17,
+        "code": "public static void typeToString(final TypeMirror type, final StringBuilder result,\n    final char innerClassSeparator) {\n  type.accept(new SimpleTypeVisitor6<Void, Void>() {\n    @Override public Void visitDeclared(DeclaredType declaredType, Void v) {\n      TypeElement typeElement = (TypeElement) declaredType.asElement();\n      rawTypeToString(result, typeElement, innerClassSeparator);\n      List<? extends TypeMirror> typeArguments = declaredType.getTypeArguments();\n      if (!typeArguments.isEmpty()) {\n        result.append(\"<\");\n        for (int i = 0; i < typeArguments.size(); i++) {\n          if (i != 0) {\n            result.append(\", \");\n          }\n          typeToString(typeArguments.get(i), result, innerClassSeparator);\n        }\n        result.append(\">\");\n      }\n      return null;\n    }\n    @Override public Void visitPrimitive(PrimitiveType primitiveType, Void v) {\n      result.append(box((PrimitiveType) type));\n      return null;\n    }\n    @Override public Void visitArray(ArrayType arrayType, Void v) {\n      TypeMirror type = arrayType.getComponentType();\n      if (type instanceof PrimitiveType) {\n        result.append(type.toString()); \n      } else {\n        typeToString(arrayType.getComponentType(), result, innerClassSeparator);\n      }\n      result.append(\"[]\");\n      return null;\n    }\n    @Override public Void visitTypeVariable(TypeVariable typeVariable, Void v) {\n      result.append(typeVariable.asElement().getSimpleName());\n      return null;\n    }\n    @Override public Void visitError(ErrorType errorType, Void v) {\n        \n        \n        \n\n        \n      if (\"<any>\".equals(errorType.toString())) {\n        throw new CodeGenerationIncompleteException(\n            \"Type reported as <any> is likely a not-yet generated parameterized type.\");\n      }\n        \n      result.append(errorType.toString());\n      return null;\n    }\n    @Override protected Void defaultAction(TypeMirror typeMirror, Void v) {\n      throw new UnsupportedOperationException(\n          \"Unexpected TypeKind \" + typeMirror.getKind() + \" for \"  + typeMirror);\n    }\n  }, null);\n}",
+        "summary_tokens": [
+            "appends",
+            "a",
+            "string",
+            "for",
+            "type",
+            "to",
+            "result"
+        ]
+    },
+    {
+        "id": 18,
+        "code": "public static String rawTypeToString(TypeMirror type, char innerClassSeparator) {\n  if (!(type instanceof DeclaredType)) {\n    throw new IllegalArgumentException(\"Unexpected type: \" + type);\n  }\n  StringBuilder result = new StringBuilder();\n  DeclaredType declaredType = (DeclaredType) type;\n  rawTypeToString(result, (TypeElement) declaredType.asElement(), innerClassSeparator);\n  return result.toString();\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "string",
+            "for",
+            "the",
+            "raw",
+            "type",
+            "of",
+            "type"
+        ]
+    },
+    {
+        "id": 19,
+        "code": "public static TypeName injectableType(TypeMirror type) {\n  return type.accept(new SimpleTypeVisitor6<TypeName, Void>() {\n    @Override public TypeName visitPrimitive(PrimitiveType primitiveType, Void v) {\n      return box(primitiveType);\n    }\n\n    @Override public TypeName visitError(ErrorType errorType, Void v) {\n        \n        \n        \n\n        \n      if (\"<any>\".equals(errorType.toString())) {\n        throw new CodeGenerationIncompleteException(\n            \"Type reported as <any> is likely a not-yet generated parameterized type.\");\n      }\n\n      return ClassName.bestGuess(errorType.toString());\n    }\n\n    @Override protected TypeName defaultAction(TypeMirror typeMirror, Void v) {\n      return TypeName.get(typeMirror);\n    }\n  }, null);\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "string",
+            "for",
+            "type"
+        ]
+    },
+    {
+        "id": 20,
+        "code": "public static Map<String, Object> getAnnotation(Class<?> annotationType, Element element) {\n  for (AnnotationMirror annotation : element.getAnnotationMirrors()) {\n    if (!rawTypeToString(annotation.getAnnotationType(), '$')\n        .equals(annotationType.getName())) {\n      continue;\n    }\n\n    Map<String, Object> result = new LinkedHashMap<String, Object>();\n    for (Method m : annotationType.getMethods()) {\n      result.put(m.getName(), m.getDefaultValue());\n    }\n    for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> e\n        : annotation.getElementValues().entrySet()) {\n      String name = e.getKey().getSimpleName().toString();\n      Object value = e.getValue().accept(VALUE_EXTRACTOR, null);\n      Object defaultValue = result.get(name);\n      if (!lenientIsInstance(defaultValue.getClass(), value)) {\n        throw new IllegalStateException(String.format(\n            \"Value of %s.%s is a %s but expected a %s\\n    value: %s\",\n            annotationType, name, value.getClass().getName(), defaultValue.getClass().getName(),\n            value instanceof Object[] ? Arrays.toString((Object[]) value) : value));\n      }\n      result.put(name, value);\n    }\n    return result;\n  }\n  return null; \n}",
+        "summary_tokens": [
+            "returns",
+            "the",
+            "annotation",
+            "on",
+            "element",
+            "formatted",
+            "as",
+            "a",
+            "map"
+        ]
+    },
+    {
+        "id": 21,
+        "code": "private static boolean lenientIsInstance(Class<?> expectedClass, Object value) {\n  if (expectedClass.isArray()) {\n    Class<?> componentType = expectedClass.getComponentType();\n    if (!(value instanceof Object[])) {\n      return false;\n    }\n    for (Object element : (Object[]) value) {\n      if (!lenientIsInstance(componentType, element)) return false;\n    }\n    return true;\n  } else if (expectedClass == Class.class) {\n    return value instanceof TypeMirror;\n  } else {\n    return expectedClass == value.getClass();\n  }\n}",
+        "summary_tokens": [
+            "returns",
+            "true",
+            "if",
+            "value",
+            "can",
+            "be",
+            "assigned",
+            "to",
+            "expected",
+            "class"
+        ]
+    },
+    {
+        "id": 22,
+        "code": "public static ExecutableElement getNoArgsConstructor(TypeElement type) {\n  for (Element enclosed : type.getEnclosedElements()) {\n    if (enclosed.getKind() != ElementKind.CONSTRUCTOR) {\n      continue;\n    }\n    ExecutableElement constructor = (ExecutableElement) enclosed;\n    if (constructor.getParameters().isEmpty()) {\n      return constructor;\n    }\n  }\n  return null;\n}",
+        "summary_tokens": [
+            "returns",
+            "the",
+            "no",
+            "args",
+            "constructor",
+            "for",
+            "type",
+            "or",
+            "null",
+            "if",
+            "no",
+            "such",
+            "constructor",
+            "exists"
+        ]
+    },
+    {
+        "id": 23,
+        "code": "public static boolean isCallableConstructor(ExecutableElement constructor) {\n  if (constructor.getModifiers().contains(Modifier.PRIVATE)) {\n    return false;\n  }\n  TypeElement type = (TypeElement) constructor.getEnclosingElement();\n  return type.getEnclosingElement().getKind() == ElementKind.PACKAGE\n      || type.getModifiers().contains(Modifier.STATIC);\n}",
+        "summary_tokens": [
+            "returns",
+            "true",
+            "if",
+            "generated",
+            "code",
+            "can",
+            "invoke",
+            "constructor"
+        ]
+    },
+    {
+        "id": 24,
+        "code": "public static String className(ExecutableElement method) {\n  return ((TypeElement) method.getEnclosingElement()).getQualifiedName().toString();\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "user",
+            "presentable",
+            "string",
+            "like",
+            "coffee"
+        ]
+    },
+    {
+        "id": 25,
+        "code": "private boolean isProvidesMethodParameter(\n    Element parameter, Map<Element, Element> parametersToTheirMethods) {\n  return parametersToTheirMethods.get(parameter).getAnnotation(Provides.class) != null;\n}",
+        "summary_tokens": [
+            "parameter",
+            "an",
+            "element",
+            "whose",
+            "kind",
+            "is",
+            "parameter"
+        ]
+    },
+    {
+        "id": 26,
+        "code": "private boolean isInjectableConstructorParameter(\n    Element parameter, Map<Element, Element> parametersToTheirMethods) {\n  return parametersToTheirMethods.get(parameter).getKind() == CONSTRUCTOR\n      && parametersToTheirMethods.get(parameter).getAnnotation(Inject.class) != null;\n}",
+        "summary_tokens": [
+            "parameter",
+            "an",
+            "element",
+            "whose",
+            "kind",
+            "is",
+            "parameter"
+        ]
+    },
+    {
+        "id": 27,
+        "code": "public void assertHasText(File buildLogfile, String ... expectedStrings) throws Throwable {\n  String buildOutput = getBuildOutput(buildLogfile);\n\n  StringBuilder sb = new StringBuilder(\"Build output did not contain expected error text:\");\n  boolean missing = false;\n\n  for (String expected : expectedStrings) {\n    if (!buildOutput.contains(expected)) {\n      missing = true;\n      sb.append(\"\\n    \\\"\").append(expected).append(\"\\\"\");\n    }\n  }\n  if (missing) {\n    appendBuildStatus(sb, buildOutput);\n    throw new Exception(sb.toString());\n  }\n}",
+        "summary_tokens": [
+            "processes",
+            "a",
+            "log",
+            "file",
+            "ensuring",
+            "it",
+            "has",
+            "all",
+            "the",
+            "provided",
+            "strings",
+            "within",
+            "it"
+        ]
+    },
+    {
+        "id": 28,
+        "code": "public void assertDoesNotHaveText(File buildLogfile, String... unexpectedStrings)\n    throws Throwable {\n  String buildOutput = getBuildOutput(buildLogfile);\n\n  StringBuilder sb = new StringBuilder(\"Build output contained unexpected text:\");\n  boolean found = false;\n\n  for (String unexpected : unexpectedStrings) {\n    if (buildOutput.contains(unexpected)) {\n      found = true;\n      sb.append(\"\\n    \\\"\").append(unexpected).append(\"\\\"\");\n    }\n  }\n  if (found) {\n    appendBuildStatus(sb, buildOutput);\n    throw new Exception(sb.toString());\n  }\n}",
+        "summary_tokens": [
+            "processes",
+            "a",
+            "log",
+            "file",
+            "ensuring",
+            "it",
+            "does",
+            "not",
+            "contain",
+            "any",
+            "of",
+            "the",
+            "provided",
+            "strings",
+            "within",
+            "it"
+        ]
+    },
+    {
+        "id": 29,
+        "code": "@Test public void providerForCtorInjection() {\n  JavaFileObject sourceFile = JavaFileObjects.forSourceString(\"Field\", \"\"\n      + \"import dagger.Module;\\n\"\n      + \"import dagger.Provides;\\n\"\n      + \"import javax.inject.Inject;\\n\"\n      + \"class Field {\\n\"\n      + \"  static class A { final String name; @Inject A(String name) { this.name = name; }}\\n\"\n      + \"  @Module(injects = { A.class, String.class })\\n\"\n      + \"  static class AModule { @Provides String name() { return \\\"foo\\\"; }}\\n\"\n      + \"}\\n\"\n  );\n\n  JavaFileObject expectedModuleAdapter =\n      JavaFileObjects.forSourceString(\"Field$AModule$$ModuleAdapter\", \"\"\n          + \"import dagger.internal.BindingsGroup;\\n\"\n          + \"import dagger.internal.ModuleAdapter;\\n\"\n          + \"import dagger.internal.ProvidesBinding;\\n\"\n          + \"import java.lang.Class;\\n\"\n          + \"import java.lang.Override;\\n\"\n          + \"import java.lang.String;\\n\"\n          + \"public final class Field$AModule$$ModuleAdapter\\n\"\n          + \"    extends ModuleAdapter<Field.AModule> {\\n\"\n          + \"  private static final String[] INJECTS = \\n\"\n          + \"      {\\\"members/Field$A\\\", \\\"members/java.lang.String\\\"};\\n\"\n          + \"  private static final Class<?>[] STATIC_INJECTIONS = {};\\n\"\n          + \"  private static final Class<?>[] INCLUDES = {};\\n\"\n          + \"  public Field$AModule$$ModuleAdapter() {\\n\"\n          + \"    super(Field.AModule.class, INJECTS, STATIC_INJECTIONS, false, INCLUDES, true, false);\\n\"\n          + \"  }\\n\"\n          + \"  @Override public Field.AModule newModule() {\\n\"\n          + \"    return new Field.AModule();\\n\"\n          + \"  }\\n\"\n          + \"  @Override public void getBindings(BindingsGroup bindings, Field.AModule module) {\\n\"\n          + \"    bindings.contributeProvidesBinding(\\\"java.lang.String\\\",\\n\"\n          + \"        new NameProvidesAdapter(module));\\n\" \n          + \"  }\\n\"\n          + \"  public static final class NameProvidesAdapter\\n\" \n          + \"      extends ProvidesBinding<String> {\\n\"\n          + \"    private final Field.AModule module;\\n\"\n          + \"    public NameProvidesAdapter(Field.AModule module) {\\n\"\n          + \"      super(\\\"java.lang.String\\\", NOT_SINGLETON, \\\"Field.AModule\\\", \\\"name\\\");\\n\"\n          + \"      this.module = module;\\n\"\n          + \"      setLibrary(false);\\n\"\n          + \"    }\\n\"\n          + \"    @Override public String get() {\\n\"\n          + \"      return module.name();\\n\" \n          + \"    }\\n\"\n          + \"  }\\n\"\n          + \"}\\n\"\n      );\n\n  JavaFileObject expectedInjectAdapter =\n      JavaFileObjects.forSourceString(\"Field$A$$InjectAdapter\", \"\"\n          + \"import dagger.internal.Binding;\\n\"\n          + \"import dagger.internal.Linker;\\n\"\n          + \"import java.lang.Override;\\n\"\n          + \"import java.lang.String;\\n\"\n          + \"import java.lang.SuppressWarnings;\\n\"\n          + \"import java.util.Set;\\n\"\n          + \"public final class Field$A$$InjectAdapter\\n\"\n          + \"    extends Binding<Field.A> {\\n\"\n          + \"  private Binding<String> name;\\n\" \n          + \"  public Field$A$$InjectAdapter() {\\n\"\n          + \"    super(\\\"Field$A\\\", \\\"members/Field$A\\\", NOT_SINGLETON, Field.A.class);\\n\"\n          + \"  }\\n\"\n          + \"  @Override @SuppressWarnings(\\\"unchecked\\\")\\n\"\n          + \"  public void attach(Linker linker) {\\n\"\n          + \"    name = (Binding<String>)linker.requestBinding(\\n\" \n          + \"      \\\"java.lang.String\\\", Field.A.class, getClass().getClassLoader());\\n\"\n          + \"  }\\n\"\n          + \"  @Override public void getDependencies(\\n\"\n          + \"      Set<Binding<?>> getBindings, Set<Binding<?>> injectMembersBindings) {\\n\"\n          + \"    getBindings.add(name);\\n\" \n          + \"  }\\n\"\n          + \"  @Override public Field.A get() {\\n\"\n          + \"    Field.A result = new Field.A(name.get());\\n\" \n          + \"    return result;\\n\"\n          + \"  }\\n\"\n          + \"}\\n\"\n      );\n\n  assertAbout(javaSource())\n      .that(sourceFile)\n      .processedWith(daggerProcessors())\n      .compilesWithoutError()\n      .and()\n      .generatesSources(expectedModuleAdapter, expectedInjectAdapter);\n\n}",
+        "summary_tokens": [
+            "shows",
+            "current",
+            "behavior",
+            "for",
+            "a",
+            "dagger"
+        ]
+    },
+    {
+        "id": 30,
+        "code": "public static ObjectGraph create(Object... modules) {\n  return DaggerObjectGraph.makeGraph(null, new FailoverLoader(), modules);\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "new",
+            "dependency",
+            "graph",
+            "using",
+            "the",
+            "module",
+            "annotated",
+            "modules"
+        ]
+    },
+    {
+        "id": 31,
+        "code": "private void allocateElements(int numElements) {\n    int initialCapacity = MIN_INITIAL_CAPACITY;\n        \n        \n    if (numElements >= initialCapacity) {\n        initialCapacity = numElements;\n        initialCapacity |= (initialCapacity >>>  1);\n        initialCapacity |= (initialCapacity >>>  2);\n        initialCapacity |= (initialCapacity >>>  4);\n        initialCapacity |= (initialCapacity >>>  8);\n        initialCapacity |= (initialCapacity >>> 16);\n        initialCapacity++;\n\n        if (initialCapacity < 0)   \n            initialCapacity >>>= 1; \n    }\n    elements = new Object[initialCapacity];\n}",
+        "summary_tokens": [
+            "allocate",
+            "empty",
+            "array",
+            "to",
+            "hold",
+            "the",
+            "given",
+            "number",
+            "of",
+            "elements"
+        ]
+    },
+    {
+        "id": 32,
+        "code": "private void doubleCapacity() {\n        \n    int p = head;\n    int n = elements.length;\n    int r = n - p; \n    int newCapacity = n << 1;\n    if (newCapacity < 0)\n        throw new IllegalStateException(\"Sorry, queue too big\");\n    Object[] a = new Object[newCapacity];\n    System.arraycopy(elements, p, a, 0, r);\n    System.arraycopy(elements, 0, a, r, p);\n    elements = a;\n    head = 0;\n    tail = n;\n}",
+        "summary_tokens": [
+            "double",
+            "the",
+            "capacity",
+            "of",
+            "this",
+            "queue"
+        ]
+    },
+    {
+        "id": 33,
+        "code": "public boolean add(E e) {\n    if (e == null)\n        throw new NullPointerException(\"e == null\");\n    elements[tail] = e;\n    if ((tail = (tail + 1) & (elements.length - 1)) == head)\n        doubleCapacity();\n    return true;\n}",
+        "summary_tokens": [
+            "inserts",
+            "the",
+            "specified",
+            "element",
+            "at",
+            "the",
+            "end",
+            "of",
+            "this",
+            "queue"
+        ]
+    },
+    {
+        "id": 34,
+        "code": "public boolean offer(E e) {\n    return add(e);\n}",
+        "summary_tokens": [
+            "inserts",
+            "the",
+            "specified",
+            "element",
+            "at",
+            "the",
+            "end",
+            "of",
+            "this",
+            "queue"
+        ]
+    },
+    {
+        "id": 35,
+        "code": "public boolean remove(Object o) {\n    if (o == null)\n        return false;\n    int mask = elements.length - 1;\n    int i = head;\n    Object x;\n    while ((x = elements[i]) != null) {\n        if (o.equals(x)) {\n            delete(i);\n            return true;\n        }\n        i = (i + 1) & mask;\n    }\n    return false;\n}",
+        "summary_tokens": [
+            "removes",
+            "a",
+            "single",
+            "instance",
+            "of",
+            "the",
+            "specified",
+            "element",
+            "from",
+            "this",
+            "queue"
+        ]
+    },
+    {
+        "id": 36,
+        "code": "public E poll() {\n    int h = head;\n    @SuppressWarnings(\"unchecked\") E result = (E) elements[h];\n        \n    if (result == null)\n        return null;\n    elements[h] = null;     \n    head = (h + 1) & (elements.length - 1);\n    return result;\n}",
+        "summary_tokens": [
+            "retrieves",
+            "and",
+            "removes",
+            "the",
+            "head",
+            "of",
+            "the",
+            "queue",
+            "represented",
+            "by",
+            "this",
+            "queue",
+            "in",
+            "other",
+            "words",
+            "the",
+            "first",
+            "element",
+            "of",
+            "this",
+            "queue",
+            "or",
+            "returns",
+            "tt",
+            "null",
+            "tt",
+            "if",
+            "this",
+            "queue",
+            "is",
+            "empty"
+        ]
+    },
+    {
+        "id": 37,
+        "code": "public E element() {\n    @SuppressWarnings(\"unchecked\") E result = (E) elements[head];\n    if (result == null)\n        throw new NoSuchElementException();\n    return result;\n}",
+        "summary_tokens": [
+            "retrieves",
+            "but",
+            "does",
+            "not",
+            "remove",
+            "the",
+            "head",
+            "of",
+            "the",
+            "queue",
+            "represented",
+            "by",
+            "this",
+            "queue"
+        ]
+    },
+    {
+        "id": 38,
+        "code": "public E peek() {\n    @SuppressWarnings(\"unchecked\") E result = (E) elements[head];\n        \n    return result;\n}",
+        "summary_tokens": [
+            "retrieves",
+            "but",
+            "does",
+            "not",
+            "remove",
+            "the",
+            "head",
+            "of",
+            "the",
+            "queue",
+            "represented",
+            "by",
+            "this",
+            "queue",
+            "or",
+            "returns",
+            "tt",
+            "null",
+            "tt",
+            "if",
+            "this",
+            "queue",
+            "is",
+            "empty"
+        ]
+    },
+    {
+        "id": 39,
+        "code": "private boolean delete(int i) {\n        \n    final Object[] elements = this.elements;\n    final int mask = elements.length - 1;\n    final int h = head;\n    final int t = tail;\n    final int front = (i - h) & mask;\n    final int back  = (t - i) & mask;\n\n        \n    if (front >= ((t - h) & mask))\n        throw new ConcurrentModificationException();\n\n        \n    if (front < back) {\n        if (h <= i) {\n            System.arraycopy(elements, h, elements, h + 1, front);\n        } else { \n            System.arraycopy(elements, 0, elements, 1, i);\n            elements[0] = elements[mask];\n            System.arraycopy(elements, h, elements, h + 1, mask - h);\n        }\n        elements[h] = null;\n        head = (h + 1) & mask;\n        return false;\n    } else {\n        if (i < t) { \n            System.arraycopy(elements, i + 1, elements, i, back);\n            tail = t - 1;\n        } else { \n            System.arraycopy(elements, i + 1, elements, i, mask - i);\n            elements[mask] = elements[0];\n            System.arraycopy(elements, 1, elements, 0, t);\n            tail = (t - 1) & mask;\n        }\n        return true;\n    }\n}",
+        "summary_tokens": [
+            "removes",
+            "the",
+            "element",
+            "at",
+            "the",
+            "specified",
+            "position",
+            "in",
+            "the",
+            "elements",
+            "array",
+            "adjusting",
+            "head",
+            "and",
+            "tail",
+            "as",
+            "necessary"
+        ]
+    },
+    {
+        "id": 40,
+        "code": "public int size() {\n    return (tail - head) & (elements.length - 1);\n}",
+        "summary_tokens": [
+            "returns",
+            "the",
+            "number",
+            "of",
+            "elements",
+            "in",
+            "this",
+            "queue"
+        ]
+    },
+    {
+        "id": 41,
+        "code": "public boolean isEmpty() {\n    return head == tail;\n}",
+        "summary_tokens": [
+            "returns",
+            "tt",
+            "true",
+            "tt",
+            "if",
+            "this",
+            "queue",
+            "contains",
+            "no",
+            "elements"
+        ]
+    },
+    {
+        "id": 42,
+        "code": "public Iterator<E> iterator() {\n    return new QueueIterator();\n}",
+        "summary_tokens": [
+            "returns",
+            "an",
+            "iterator",
+            "over",
+            "the",
+            "elements",
+            "in",
+            "this",
+            "queue"
+        ]
+    },
+    {
+        "id": 43,
+        "code": "public boolean contains(Object o) {\n    if (o == null)\n        return false;\n    int mask = elements.length - 1;\n    int i = head;\n    Object x;\n    while ((x = elements[i]) != null) {\n        if (o.equals(x))\n            return true;\n        i = (i + 1) & mask;\n    }\n    return false;\n}",
+        "summary_tokens": [
+            "returns",
+            "tt",
+            "true",
+            "tt",
+            "if",
+            "this",
+            "queue",
+            "contains",
+            "the",
+            "specified",
+            "element"
+        ]
+    },
+    {
+        "id": 44,
+        "code": "public void clear() {\n    int h = head;\n    int t = tail;\n    if (h != t) { \n        head = tail = 0;\n        int i = h;\n        int mask = elements.length - 1;\n        do {\n            elements[i] = null;\n            i = (i + 1) & mask;\n        } while (i != t);\n    }\n}",
+        "summary_tokens": [
+            "removes",
+            "all",
+            "of",
+            "the",
+            "elements",
+            "from",
+            "this",
+            "queue"
+        ]
+    },
+    {
+        "id": 45,
+        "code": "public <T> T[] toArray(T[] a) {\n    int size = size();\n    if (a.length < size)\n        a = (T[]) java.lang.reflect.Array.newInstance(\n                a.getClass().getComponentType(), size);\n    if (head < tail) {\n        System.arraycopy(elements, head, a, 0, size());\n    } else if (head > tail) {\n        int headPortionLen = elements.length - head;\n        System.arraycopy(elements, head, a, 0, headPortionLen);\n        System.arraycopy(elements, 0, a, headPortionLen, tail);\n    }\n    if (a.length > size)\n        a[size] = null;\n    return a;\n}",
+        "summary_tokens": [
+            "returns",
+            "an",
+            "array",
+            "containing",
+            "all",
+            "of",
+            "the",
+            "elements",
+            "in",
+            "this",
+            "queue",
+            "in",
+            "proper",
+            "sequence",
+            "from",
+            "first",
+            "to",
+            "last",
+            "element",
+            "the",
+            "runtime",
+            "type",
+            "of",
+            "the",
+            "returned",
+            "array",
+            "is",
+            "that",
+            "of",
+            "the",
+            "specified",
+            "array"
+        ]
+    },
+    {
+        "id": 46,
+        "code": "public ArrayQueue<E> clone() {\n    try {\n        ArrayQueue<E> result = (ArrayQueue<E>) super.clone();\n        E[] newElements = (E[]) Array.newInstance(elements.getClass().getComponentType(),\n            elements.length);\n        System.arraycopy(elements, 0, newElements, 0, elements.length);\n        result.elements = newElements;\n        return result;\n    } catch (CloneNotSupportedException e) {\n        throw new AssertionError();\n    }\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "copy",
+            "of",
+            "this",
+            "queue"
+        ]
+    },
+    {
+        "id": 47,
+        "code": "public void attach(Linker linker) {\n}",
+        "summary_tokens": [
+            "links",
+            "this",
+            "binding",
+            "to",
+            "its",
+            "dependencies"
+        ]
+    },
+    {
+        "id": 48,
+        "code": "public void getDependencies(Set<Binding<?>> getBindings, Set<Binding<?>> injectMembersBindings) {\n    \n}",
+        "summary_tokens": [
+            "populates",
+            "get",
+            "bindings",
+            "and",
+            "inject",
+            "members",
+            "bindings",
+            "with",
+            "the",
+            "bindings",
+            "used",
+            "by",
+            "this",
+            "binding",
+            "to",
+            "satisfy",
+            "get",
+            "and",
+            "inject",
+            "members",
+            "calls",
+            "respectively"
+        ]
+    },
+    {
+        "id": 49,
+        "code": "@Override public <T> ModuleAdapter<T> getModuleAdapter(Class<T> type) {\n  return (ModuleAdapter<T>) loadedAdapters.get(type);\n}",
+        "summary_tokens": [
+            "obtains",
+            "a",
+            "module",
+            "adapter",
+            "for",
+            "module",
+            "from",
+            "the",
+            "first",
+            "responding",
+            "resolver"
+        ]
+    },
+    {
+        "id": 50,
+        "code": "public static String get(Type type, Annotation[] annotations, Object subject) {\n  return get(type, extractQualifier(annotations, subject));\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "key",
+            "for",
+            "type",
+            "annotated",
+            "with",
+            "annotations",
+            "reporting",
+            "failures",
+            "against",
+            "subject"
+        ]
+    },
+    {
+        "id": 51,
+        "code": "public static String getMembersKey(Class<?> key) {\n    \n  return \"members/\".concat(key.getName());\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "key",
+            "for",
+            "the",
+            "members",
+            "of",
+            "type"
+        ]
+    },
+    {
+        "id": 52,
+        "code": "public static String getSetKey(Type type, Annotation[] annotations, Object subject) {\n  Annotation qualifier = extractQualifier(annotations, subject);\n  type = boxIfPrimitive(type);\n  StringBuilder result = new StringBuilder();\n  if (qualifier != null) {\n    result.append(qualifier).append(\"/\");\n  }\n  result.append(SET_PREFIX);\n  typeToString(type, result, true);\n  result.append(\">\");\n  return result.toString();\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "key",
+            "for",
+            "type",
+            "annotated",
+            "with",
+            "annotations",
+            "wrapped",
+            "by",
+            "set",
+            "reporting",
+            "failures",
+            "against",
+            "subject"
+        ]
+    },
+    {
+        "id": 53,
+        "code": "private static Annotation extractQualifier(Annotation[] annotations,\n    Object subject) {\n  Annotation qualifier = null;\n  for (Annotation a : annotations) {\n    if (!IS_QUALIFIER_ANNOTATION.get(a.annotationType())) {\n      continue;\n    }\n    if (qualifier != null) {\n      throw new IllegalArgumentException(\"Too many qualifier annotations on \" + subject);\n    }\n    qualifier = a;\n  }\n  return qualifier;\n}",
+        "summary_tokens": [
+            "validates",
+            "that",
+            "among",
+            "annotations",
+            "there",
+            "exists",
+            "only",
+            "one",
+            "annotation",
+            "which",
+            "is",
+            "itself",
+            "qualified",
+            "by"
+        ]
+    },
+    {
+        "id": 54,
+        "code": "private static void typeToString(Type type, StringBuilder result, boolean topLevel) {\n  if (type instanceof Class) {\n    Class<?> c = (Class<?>) type;\n    if (c.isArray()) {\n      typeToString(c.getComponentType(), result, false);\n      result.append(\"[]\");\n    } else if (c.isPrimitive()) {\n      if (topLevel) {\n        throw new UnsupportedOperationException(\"Uninjectable type \" + c.getName());\n      }\n      result.append(c.getName());\n    } else {\n      result.append(c.getName());\n    }\n  } else if (type instanceof ParameterizedType) {\n    ParameterizedType parameterizedType = (ParameterizedType) type;\n    typeToString(parameterizedType.getRawType(), result, true);\n    Type[] arguments = parameterizedType.getActualTypeArguments();\n    result.append(\"<\");\n    for (int i = 0; i < arguments.length; i++) {\n      if (i != 0) {\n        result.append(\", \");\n      }\n      typeToString(arguments[i], result, true);\n    }\n    result.append(\">\");\n  } else if (type instanceof GenericArrayType) {\n    GenericArrayType genericArrayType = (GenericArrayType) type;\n    typeToString(genericArrayType.getGenericComponentType(), result, false);\n    result.append(\"[]\");\n  } else {\n    throw new UnsupportedOperationException(\"Uninjectable type \" + type);\n  }\n}",
+        "summary_tokens": [
+            "top",
+            "level",
+            "true",
+            "if",
+            "this",
+            "is",
+            "a",
+            "top",
+            "level",
+            "type",
+            "where",
+            "primitive",
+            "types",
+            "like",
+            "int",
+            "are",
+            "forbidden"
+        ]
+    },
+    {
+        "id": 55,
+        "code": "static String getBuiltInBindingsKey(String key) {\n  int start = startOfType(key);\n  if (substringStartsWith(key, start, PROVIDER_PREFIX)) {\n    return extractKey(key, start, key.substring(0, start), PROVIDER_PREFIX);\n  } else if (substringStartsWith(key, start, MEMBERS_INJECTOR_PREFIX)) {\n    return extractKey(key, start, \"members/\", MEMBERS_INJECTOR_PREFIX);\n  } else {\n    return null;\n  }\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "key",
+            "for",
+            "the",
+            "type",
+            "provided",
+            "by",
+            "or",
+            "injected",
+            "by",
+            "this",
+            "key"
+        ]
+    },
+    {
+        "id": 56,
+        "code": "static String getLazyKey(String key) {\n  int start = startOfType(key);\n  if (substringStartsWith(key, start, LAZY_PREFIX)) {\n    return extractKey(key, start, key.substring(0, start), LAZY_PREFIX);\n  } else {\n    return null;\n  }\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "key",
+            "for",
+            "the",
+            "underlying",
+            "binding",
+            "of",
+            "a",
+            "lazy",
+            "t",
+            "value"
+        ]
+    },
+    {
+        "id": 57,
+        "code": "private static int startOfType(String key) {\n  return (key.startsWith(\"@\")) ? key.lastIndexOf('/') + 1 : 0;\n}",
+        "summary_tokens": [
+            "returns",
+            "the",
+            "start",
+            "of",
+            "a",
+            "key",
+            "if",
+            "it",
+            "is",
+            "a",
+            "plain",
+            "key",
+            "and",
+            "the",
+            "start",
+            "of",
+            "the",
+            "underlying",
+            "key",
+            "if",
+            "it",
+            "is",
+            "an",
+            "annotated",
+            "key"
+        ]
+    },
+    {
+        "id": 58,
+        "code": "private static String extractKey(String key, int start, String delegatePrefix, String prefix) {\n  return delegatePrefix + key.substring(start + prefix.length(), key.length() - 1);\n}",
+        "summary_tokens": [
+            "returns",
+            "an",
+            "unwrapped",
+            "key",
+            "the",
+            "key",
+            "for",
+            "t",
+            "from",
+            "a",
+            "provider",
+            "t",
+            "for",
+            "example",
+            "removing",
+            "all",
+            "wrapping",
+            "key",
+            "information",
+            "but",
+            "preserving",
+            "annotations",
+            "or",
+            "known",
+            "prefixes"
+        ]
+    },
+    {
+        "id": 59,
+        "code": "private static boolean substringStartsWith(String string, int offset, String substring) {\n  return string.regionMatches(offset, substring, 0, substring.length());\n}",
+        "summary_tokens": [
+            "returns",
+            "true",
+            "if",
+            "string"
+        ]
+    },
+    {
+        "id": 60,
+        "code": "public static boolean isAnnotated(String key) {\n  return key.startsWith(\"@\");\n}",
+        "summary_tokens": [
+            "returns",
+            "true",
+            "if",
+            "key",
+            "has",
+            "a",
+            "qualifier",
+            "annotation"
+        ]
+    },
+    {
+        "id": 61,
+        "code": "public static String getClassName(String key) {\n  int start = 0;\n  if (key.startsWith(\"@\") || key.startsWith(\"members/\")) {\n    start = key.lastIndexOf('/') + 1;\n  }\n  return (key.indexOf('<', start) == -1 && key.indexOf('[', start) == -1)\n      ? key.substring(start)\n      : null;\n}",
+        "summary_tokens": [
+            "returns",
+            "the",
+            "class",
+            "name",
+            "for",
+            "key",
+            "if",
+            "key",
+            "was",
+            "created",
+            "with",
+            "a",
+            "class",
+            "instance"
+        ]
+    },
+    {
+        "id": 62,
+        "code": "public static boolean isPlatformType(String name) {\n  return name.startsWith(\"java.\") || name.startsWith(\"javax.\") || name.startsWith(\"android.\");\n}",
+        "summary_tokens": [
+            "returns",
+            "true",
+            "if",
+            "name",
+            "is",
+            "the",
+            "name",
+            "of",
+            "a",
+            "platform",
+            "provided",
+            "class"
+        ]
+    },
+    {
+        "id": 63,
+        "code": "public void installBindings(BindingsGroup toInstall) {\n  if (linkedBindings != null) {\n    throw new IllegalStateException(\"Cannot install further bindings after calling linkAll().\");\n  }\n  for (Map.Entry<String, ? extends Binding<?>> entry : toInstall.entrySet()) {\n    bindings.put(entry.getKey(), scope(entry.getValue()));\n  }\n}",
+        "summary_tokens": [
+            "adds",
+            "all",
+            "bindings",
+            "in",
+            "to",
+            "install"
+        ]
+    },
+    {
+        "id": 64,
+        "code": "public Map<String, Binding<?>> linkAll() {\n  assertLockHeld();\n  if (linkedBindings != null) {\n    return linkedBindings;\n  }\n  for (Binding<?> binding : bindings.values()) {\n    if (!binding.isLinked()) {\n      toLink.add(binding);\n    }\n  }\n  linkRequested(); \n  linkedBindings = Collections.unmodifiableMap(bindings);\n  return linkedBindings;\n}",
+        "summary_tokens": [
+            "links",
+            "all",
+            "known",
+            "bindings",
+            "whether",
+            "requested",
+            "or",
+            "installed",
+            "plus",
+            "all",
+            "of",
+            "their",
+            "transitive",
+            "dependencies"
+        ]
+    },
+    {
+        "id": 65,
+        "code": "public Map<String, Binding<?>> fullyLinkedBindings() {\n  return linkedBindings;\n}",
+        "summary_tokens": [
+            "returns",
+            "the",
+            "map",
+            "of",
+            "all",
+            "bindings",
+            "available",
+            "to",
+            "this",
+            "linker",
+            "if",
+            "and",
+            "only",
+            "if",
+            "link",
+            "all",
+            "has",
+            "successfully",
+            "returned",
+            "at",
+            "least",
+            "once",
+            "otherwise",
+            "it",
+            "returns",
+            "null"
+        ]
+    },
+    {
+        "id": 66,
+        "code": "public void linkRequested() {\n  assertLockHeld();\n  Binding<?> binding;\n  while ((binding = toLink.poll()) != null) {\n    if (binding instanceof DeferredBinding) {\n      DeferredBinding deferred = (DeferredBinding) binding;\n      String key = deferred.deferredKey;\n      boolean mustHaveInjections = deferred.mustHaveInjections;\n      if (bindings.containsKey(key)) {\n        continue; \n      }\n      try {\n        Binding<?> resolvedBinding =\n            createBinding(key, binding.requiredBy, deferred.classLoader, mustHaveInjections);\n        resolvedBinding.setLibrary(binding.library());\n        resolvedBinding.setDependedOn(binding.dependedOn());\n          \n        if (!key.equals(resolvedBinding.provideKey) && !key.equals(resolvedBinding.membersKey)) {\n          throw new IllegalStateException(\"Unable to create binding for \" + key);\n        }\n          \n        Binding<?> scopedBinding = scope(resolvedBinding);\n        toLink.add(scopedBinding);\n        putBinding(scopedBinding);\n      } catch (InvalidBindingException e) {\n        addError(e.type + \" \" + e.getMessage() + \" required by \" + binding.requiredBy);\n        bindings.put(key, Binding.UNRESOLVED);\n      } catch (UnsupportedOperationException e) {\n        addError(\"Unsupported: \" + e.getMessage() + \" required by \" + binding.requiredBy);\n        bindings.put(key, Binding.UNRESOLVED);\n      } catch (IllegalArgumentException e) {\n        addError(e.getMessage() + \" required by \" + binding.requiredBy);\n        bindings.put(key, Binding.UNRESOLVED);\n      } catch (RuntimeException e) {\n        throw e;\n      } catch (Exception e) {\n        throw new RuntimeException(e);\n      }\n    } else {\n        \n        \n        \n      attachSuccess = true;\n      binding.attach(this);\n      if (attachSuccess) {\n        binding.setLinked();\n      } else {\n        toLink.add(binding);\n      }\n    }\n  }\n\n  try {\n    errorHandler.handleErrors(errors);\n  } finally {\n    errors.clear();\n  }\n}",
+        "summary_tokens": [
+            "links",
+            "all",
+            "requested",
+            "bindings",
+            "plus",
+            "their",
+            "transitive",
+            "dependencies"
+        ]
+    },
+    {
+        "id": 67,
+        "code": "private void assertLockHeld() {\n  if (!Thread.holdsLock(this)) throw new AssertionError();\n}",
+        "summary_tokens": [
+            "don",
+            "t",
+            "permit",
+            "bindings",
+            "to",
+            "be",
+            "linked",
+            "without",
+            "a",
+            "lock"
+        ]
+    },
+    {
+        "id": 68,
+        "code": "private Binding<?> createBinding(String key, Object requiredBy, ClassLoader classLoader,\n    boolean mustHaveInjections) {\n  String builtInBindingsKey = Keys.getBuiltInBindingsKey(key);\n  if (builtInBindingsKey != null) {\n    return new BuiltInBinding<Object>(key, requiredBy, classLoader, builtInBindingsKey);\n  }\n  String lazyKey = Keys.getLazyKey(key);\n  if (lazyKey != null) {\n    return new LazyBinding<Object>(key, requiredBy, classLoader, lazyKey);\n  }\n\n  String className = Keys.getClassName(key);\n  if (className == null) {\n    throw new InvalidBindingException(key,\n        \"is a generic class or an array and can only be bound with concrete type parameter(s) \"\n        + \"in a @Provides method.\");\n  }\n  if (Keys.isAnnotated(key)) {\n    throw new InvalidBindingException(key,\n        \"is a @Qualifier-annotated type and must be bound by a @Provides method.\");\n  }\n  Binding<?> binding =\n      plugin.getAtInjectBinding(key, className, classLoader, mustHaveInjections);\n  if (binding != null) {\n    return binding;\n  }\n  throw new InvalidBindingException(className, \"could not be bound with key \" + key);\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "binding",
+            "for",
+            "the",
+            "key",
+            "in",
+            "deferred"
+        ]
+    },
+    {
+        "id": 69,
+        "code": "public Binding<?> requestBinding(String key, Object requiredBy, ClassLoader classLoader,\n    boolean mustHaveInjections, boolean library) {\n  assertLockHeld();\n\n  Binding<?> binding = null;\n  for (Linker linker = this; linker != null; linker = linker.base) {\n    binding = linker.bindings.get(key);\n    if (binding != null) {\n      if (linker != this && !binding.isLinked()) throw new AssertionError();\n      break;\n    }\n  }\n\n  if (binding == null) {\n      \n    Binding<?> deferredBinding =\n        new DeferredBinding(key, classLoader, requiredBy, mustHaveInjections);\n    deferredBinding.setLibrary(library);\n    deferredBinding.setDependedOn(true);\n    toLink.add(deferredBinding);\n    attachSuccess = false;\n    return null;\n  }\n\n  if (!binding.isLinked()) {\n    toLink.add(binding); \n  }\n\n  binding.setLibrary(library);\n  binding.setDependedOn(true);\n  return binding;\n}",
+        "summary_tokens": [
+            "returns",
+            "the",
+            "binding",
+            "if",
+            "it",
+            "exists",
+            "immediately"
+        ]
+    },
+    {
+        "id": 70,
+        "code": "static <T> Binding<T> scope(final Binding<T> binding) {\n  if (!binding.isSingleton() || binding instanceof SingletonBinding) {\n    return binding; \n  }\n  return new SingletonBinding<T>(binding);\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "scoped",
+            "binding",
+            "for",
+            "binding"
+        ]
+    },
+    {
+        "id": 71,
+        "code": "private <K, V> void putIfAbsent(Map<K, V> map, K key, V value) {\n  V replaced = map.put(key, value); \n  if (replaced != null) {\n    map.put(key, replaced);\n  }\n}",
+        "summary_tokens": [
+            "puts",
+            "the",
+            "mapping",
+            "key",
+            "value",
+            "in",
+            "map",
+            "if",
+            "no",
+            "mapping",
+            "for",
+            "key",
+            "already",
+            "exists"
+        ]
+    },
+    {
+        "id": 72,
+        "code": "private void addError(String message) {\n  errors.add(message);\n}",
+        "summary_tokens": [
+            "enqueue",
+            "message",
+            "as",
+            "a",
+            "fatal",
+            "error",
+            "to",
+            "be",
+            "reported",
+            "to",
+            "the",
+            "user"
+        ]
+    },
+    {
+        "id": 73,
+        "code": "protected Class<?> loadClass(ClassLoader classLoader, String name) {\n    \n  classLoader = (classLoader != null) ? classLoader : ClassLoader.getSystemClassLoader();\n  return caches.get(classLoader).get(name);\n}",
+        "summary_tokens": [
+            "loads",
+            "a",
+            "class",
+            "from",
+            "a",
+            "class",
+            "loader",
+            "specific",
+            "cache",
+            "if",
+            "it",
+            "s",
+            "already",
+            "there",
+            "or",
+            "loads",
+            "it",
+            "from",
+            "the",
+            "given",
+            "class",
+            "loader",
+            "and",
+            "caching",
+            "it",
+            "for",
+            "future",
+            "requests"
+        ]
+    },
+    {
+        "id": 74,
+        "code": "protected <T> T instantiate(String name, ClassLoader classLoader) {\n  try {\n    Class<?> generatedClass = loadClass(classLoader, name);\n    if (generatedClass == Void.class) {\n      return null;\n    }\n    @SuppressWarnings(\"unchecked\")\n    T instance = (T) generatedClass.newInstance();\n    return instance;\n  } catch (InstantiationException e) {\n    throw new RuntimeException(\"Failed to initialize \" + name, e);\n  } catch (IllegalAccessException e) {\n    throw new RuntimeException(\"Failed to initialize \" + name, e);\n  }\n}",
+        "summary_tokens": [
+            "instantiates",
+            "a",
+            "class",
+            "using",
+            "its",
+            "default",
+            "constructor",
+            "and",
+            "the",
+            "given",
+            "class",
+            "loader"
+        ]
+    },
+    {
+        "id": 75,
+        "code": "public void getBindings(BindingsGroup map, T module) {\n    \n}",
+        "summary_tokens": [
+            "returns",
+            "bindings",
+            "for",
+            "the",
+            "methods",
+            "of",
+            "module"
+        ]
+    },
+    {
+        "id": 76,
+        "code": "protected T newModule() {\n  throw new UnsupportedOperationException(\"No no-args constructor on \" + getClass().getName());\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "new",
+            "instance",
+            "of",
+            "the",
+            "module",
+            "class",
+            "created",
+            "using",
+            "a",
+            "no",
+            "args",
+            "constructor"
+        ]
+    },
+    {
+        "id": 77,
+        "code": "public static Map<ModuleAdapter<?>, Object> loadModules(Loader loader,\n    Object[] seedModulesOrClasses) {\n  Map<ModuleAdapter<?>, Object> seedAdapters =\n      new LinkedHashMap<ModuleAdapter<?>, Object>(seedModulesOrClasses.length);\n  for (int i = 0; i < seedModulesOrClasses.length; i++) {\n    if (seedModulesOrClasses[i] instanceof Class<?>) {\n      ModuleAdapter<?> adapter = loader.getModuleAdapter((Class<?>) seedModulesOrClasses[i]);\n      seedAdapters.put(adapter, adapter.newModule());\n    } else {\n      ModuleAdapter<?> adapter = loader.getModuleAdapter(seedModulesOrClasses[i].getClass());\n      seedAdapters.put(adapter, seedModulesOrClasses[i]);\n    }\n  }\n\n    \n    \n  Map<ModuleAdapter<?>, Object> result =\n      new LinkedHashMap<ModuleAdapter<?>, Object>(seedAdapters);\n\n    \n  Map<Class<?>, ModuleAdapter<?>> transitiveInclusions =\n      new LinkedHashMap<Class<?>, ModuleAdapter<?>>();\n  for (ModuleAdapter<?> adapter : seedAdapters.keySet()) {\n    collectIncludedModulesRecursively(loader, adapter, transitiveInclusions);\n  }\n    \n  for (ModuleAdapter<?> dependency : transitiveInclusions.values()) {\n    if (!result.containsKey(dependency)) {\n      result.put(dependency, dependency.newModule());\n    }\n  }\n  return result;\n}",
+        "summary_tokens": [
+            "returns",
+            "a",
+            "full",
+            "set",
+            "of",
+            "module",
+            "adapters",
+            "including",
+            "module",
+            "adapters",
+            "for",
+            "included",
+            "modules"
+        ]
+    },
+    {
+        "id": 78,
+        "code": "private static void collectIncludedModulesRecursively(Loader plugin, ModuleAdapter<?> adapter,\n    Map<Class<?>, ModuleAdapter<?>> result) {\n  for (Class<?> include : adapter.includes) {\n    if (!result.containsKey(include)) {\n      ModuleAdapter<?> includedModuleAdapter = plugin.getModuleAdapter(include);\n      result.put(include, includedModuleAdapter);\n      collectIncludedModulesRecursively(plugin, includedModuleAdapter, result);\n    }\n  }\n}",
+        "summary_tokens": [
+            "fills",
+            "result",
+            "with",
+            "the",
+            "module",
+            "adapters",
+            "for",
+            "the",
+            "includes",
+            "of",
+            "adapter",
+            "and",
+            "their",
+            "includes",
+            "recursively"
+        ]
+    },
+    {
+        "id": 79,
+        "code": "public static <M> ModuleAdapter<M> create(Class<M> moduleClass) {\n  Module annotation = moduleClass.getAnnotation(Module.class);\n  if (annotation == null) {\n    throw new IllegalArgumentException(\"No @Module on \" + moduleClass.getName());\n  }\n  if (!moduleClass.getSuperclass().equals(Object.class)) {\n    throw new IllegalArgumentException(\n        \"Modules must not extend from other classes: \" + moduleClass.getName());\n  }\n  return new TestingModuleAdapter<M>(moduleClass, annotation);\n}",
+        "summary_tokens": [
+            "creates",
+            "a",
+            "testing",
+            "module",
+            "adapter",
+            "or",
+            "throws",
+            "an",
+            "illegal",
+            "argument",
+            "exception"
+        ]
+    },
+    {
+        "id": 80,
+        "code": "@Provides @Singleton @ForActivity Context provideActivityContext() {\n  return activity;\n}",
+        "summary_tokens": [
+            "allow",
+            "the",
+            "activity",
+            "context",
+            "to",
+            "be",
+            "injected",
+            "but",
+            "require",
+            "that",
+            "it",
+            "be",
+            "annotated",
+            "with",
+            "for",
+            "activity",
+            "to",
+            "explicitly",
+            "differentiate",
+            "it",
+            "from",
+            "application",
+            "context"
+        ]
+    },
+    {
+        "id": 81,
+        "code": "@Provides @Singleton @ForApplication Context provideApplicationContext() {\n  return application;\n}",
+        "summary_tokens": [
+            "allow",
+            "the",
+            "application",
+            "context",
+            "to",
+            "be",
+            "injected",
+            "but",
+            "require",
+            "that",
+            "it",
+            "be",
+            "annotated",
+            "with",
+            "for",
+            "application",
+            "to",
+            "explicitly",
+            "differentiate",
+            "it",
+            "from",
+            "an",
+            "activity",
+            "context"
+        ]
+    },
+    {
+        "id": 82,
+        "code": "protected List<Object> getModules() {\n  return Arrays.<Object>asList(new AndroidModule(this));\n}",
+        "summary_tokens": [
+            "a",
+            "list",
+            "of",
+            "modules",
+            "to",
+            "use",
+            "for",
+            "the",
+            "application",
+            "graph"
+        ]
+    },
+    {
+        "id": 83,
+        "code": "protected List<Object> getModules() {\n  return Arrays.<Object>asList(new ActivityModule(this));\n}",
+        "summary_tokens": [
+            "a",
+            "list",
+            "of",
+            "modules",
+            "to",
+            "use",
+            "for",
+            "the",
+            "individual",
+            "activity",
+            "graph"
+        ]
+    },
+    {
+        "id": 84,
+        "code": "public void inject(Object object) {\n  activityGraph.inject(object);\n}",
+        "summary_tokens": [
+            "inject",
+            "the",
+            "supplied",
+            "object",
+            "using",
+            "the",
+            "activity",
+            "specific",
+            "graph"
+        ]
+    },
+    {
+        "id": 85,
+        "code": "@Provides @Singleton @ForApplication Context provideApplicationContext() {\n  return application;\n}",
+        "summary_tokens": [
+            "allow",
+            "the",
+            "application",
+            "context",
+            "to",
+            "be",
+            "injected",
+            "but",
+            "require",
+            "that",
+            "it",
+            "be",
+            "annotated",
+            "with",
+            "for",
+            "application",
+            "to",
+            "explicitly",
+            "differentiate",
+            "it",
+            "from",
+            "an",
+            "activity",
+            "context"
+        ]
+    }
+]
