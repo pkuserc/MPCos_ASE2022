@@ -6,7 +6,7 @@ Contributed by National Engineering Research Center for Software Engineering, Pe
 
 ## Code
 
-We will open our code soon.
+We provide our MPCos model in the `model/` folder.
 
 ## Datasets
 
